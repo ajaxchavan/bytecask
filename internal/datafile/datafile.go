@@ -8,11 +8,13 @@ import (
 type Datafile struct {
 	logger log.Log
 	writer *os.File
-	reader *os.File
+	Reader *os.File
 	offset int
 }
 
 type FileDir map[uint32]*Datafile
+
+type StaleDir map[uint32]Datafile
 
 const InvalidOffset = -1
 
@@ -31,7 +33,7 @@ func New(filePath string) (*Datafile, error) {
 	return &Datafile{
 		//logger: logger,
 		writer: writer,
-		reader: reader,
+		Reader: reader,
 		offset: 0,
 	}, nil
 }
@@ -57,7 +59,7 @@ func (d *Datafile) Append(data []byte) (int, error) {
 func (d *Datafile) Read(off uint32, size uint32) ([]byte, error) {
 	buff := make([]byte, size)
 
-	if _, err := d.reader.ReadAt(buff, int64(off)); err != nil {
+	if _, err := d.Reader.ReadAt(buff, int64(off)); err != nil {
 		return nil, err
 	}
 
