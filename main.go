@@ -42,6 +42,8 @@ func main() {
 
 	go server.WaitForSignal(&wg, sigs, store)
 
+	go store.AsyncFlush(&wg)
+
 	go store.Compact(&wg)
 
 	wg.Wait()

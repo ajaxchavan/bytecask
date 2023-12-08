@@ -41,6 +41,31 @@ func (s *Store) flush() error {
 	return nil
 }
 
+func (s *Store) AsyncFlush(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	ticker := time.NewTicker(s.cfg.SyncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := s.flush(); err != nil {
+				const msg = "failed to flush keyDir to disk"
+				s.Log.Error(msg, zap.Error(err))
+			}
+			if err := s.dataFile.Flush(); err != nil {
+				const msg = "failed to flush datafile to disk"
+				s.Log.Error(msg, zap.Error(err))
+			}
+			// TODO:
+			// case <-ctx.Done():
+			//	s.Log.Info("canceling async flush run")
+			//	return
+		}
+	}
+}
+
 func (s *Store) Compact(wg *sync.WaitGroup) {
 	defer wg.Done()
 	ticker := time.NewTicker(s.cfg.MergeInterval)
