@@ -42,5 +42,7 @@ func main() {
 
 	go server.WaitForSignal(&wg, sigs, store)
 
+	go store.Compact(&wg)
+
 	wg.Wait()
 }
