@@ -35,6 +35,8 @@ func (s *Store) flush() error {
 	}
 
 	encoder := gob.NewEncoder(writer)
+	s.Lock()
+	defer s.Unlock()
 	if err := encoder.Encode(s.KeyDir); err != nil {
 		return err
 	}
