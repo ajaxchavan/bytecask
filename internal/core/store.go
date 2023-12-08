@@ -2,9 +2,6 @@ package core
 
 import (
 	"bytes"
-	"crow/internal/config"
-	"crow/internal/datafile"
-	"crow/internal/log"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
@@ -13,6 +10,10 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ajaxchavan/crow/internal/config"
+	"github.com/ajaxchavan/crow/internal/datafile"
+	"github.com/ajaxchavan/crow/internal/log"
 )
 
 type Store struct {
@@ -24,6 +25,7 @@ type Store struct {
 	Log        log.Log
 	cfg        config.Config
 	stale      datafile.StaleDir
+	sync.Mutex
 }
 
 func createDirectory(directory string) error {
@@ -54,20 +56,18 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 		keyDir = make(map[string]Meta)
 		fileDir = make(map[uint32]*datafile.Datafile)
 	case errors.Is(err, os.ErrExist):
-		fileDir, number, err = buildStale(cfg.Dir)
+		fileDir, number, err = buildStale(cfg.Dir, logger)
 		if err != nil {
 			const msg = "failed to build stale data"
 			logger.Error(msg, zap.Error(err))
 			return nil, err
 		}
-		fmt.Println(stale)
-		keyDir, err = buildKeyDir(cfg.Dir)
+		keyDir, err = buildKeyDir(cfg.Dir, logger)
 		if err != nil {
 			const msg = "failed to build key directory"
 			logger.Error(msg, zap.Error(err))
 			return nil, err
 		}
-		fmt.Println(keyDir)
 	default:
 		const msg = "failed to create data directory"
 		logger.Error(msg, zap.Error(err))
@@ -82,6 +82,8 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 		return nil, err
 	}
 
+	// debug
+	logger.Info("info", zap.Uint32("number", number))
 	return &Store{
 		dataFile: df,
 		BufferPool: sync.Pool{
@@ -99,12 +101,16 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 }
 
 func (s *Store) Get(key string) ([]byte, error) {
+	s.Lock()
 	meta := s.KeyDir[key]
 	if meta.RecordSize == 0 {
+		s.Unlock()
 		return nil, fmt.Errorf("key doesn't exist")
 	}
 	dataFile := s.FileDir[meta.FileId]
+	s.Unlock()
 
+	// TODO(edge_case): we got the datafile and at the same time compaction deleted that datafile.
 	record, err := dataFile.Read(meta.Offset, meta.RecordSize)
 	if err != nil {
 		const msg = "failed to read data file"
@@ -129,20 +135,24 @@ func (s *Store) Set(key string, value []byte) error {
 		KeySize:   uint32(len(key)),
 		ValSize:   uint32(len(value)),
 	}
-
-	s.FileDir[s.FileId] = s.dataFile
-
 	buffer := s.BufferPool.Get().(*bytes.Buffer)
+	defer s.BufferPool.Put(buffer)
+	defer buffer.Reset()
 
 	if err := header.encode(buffer); err != nil {
+		const msg = "unable to encode record"
+		s.Log.Error(msg, zap.Error(err))
 		return err
 	}
 
 	buffer.WriteString(key)
 	buffer.Write(value)
 
+	s.Lock()
+	s.FileDir[s.FileId] = s.dataFile
 	offset, err := s.dataFile.Append(buffer.Bytes())
 	if err != nil {
+		s.Unlock()
 		const msg = "unable to append record"
 		s.Log.Error(msg, zap.Error(err))
 		return err
@@ -154,11 +164,12 @@ func (s *Store) Set(key string, value []byte) error {
 		RecordSize: uint32(buffer.Len()),
 		FileId:     s.FileId,
 	}
+	s.Unlock()
 
 	return nil
 }
 
-func (s *Store) Delete(key string) error {
+func (s *Store) Del(key string) error {
 	meta := s.KeyDir[key]
 	if meta.RecordSize == 0 {
 		return fmt.Errorf("key doesn't exist")

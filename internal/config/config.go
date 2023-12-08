@@ -8,11 +8,16 @@ var (
 	defaultFileSizeInterval = time.Minute * 1
 )
 
+const (
+	IOBufferLength    = 512
+	IOBufferLengthMax = 50 * 1024
+)
+
 type Opts struct {
 	Dir                   string
 	fsync                 bool
-	syncInterval          *time.Duration
-	mergeInterval         *time.Duration
+	SyncInterval          time.Duration
+	MergeInterval         time.Duration
 	checkFileSizeInterval *time.Duration
 }
 
@@ -26,8 +31,8 @@ func defaultOpts() Opts {
 	return Opts{
 		Dir:                   ".data",
 		fsync:                 false,
-		syncInterval:          &defaultSyncInterval,
-		mergeInterval:         &defaultMergeInterval,
+		SyncInterval:          defaultSyncInterval,
+		MergeInterval:         defaultMergeInterval,
 		checkFileSizeInterval: &defaultFileSizeInterval,
 	}
 }

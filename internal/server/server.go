@@ -1,26 +1,17 @@
 package server
 
 import (
-	"crow/internal/core"
 	"fmt"
-	"go.uber.org/zap"
+	"io"
 	"net"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
-)
 
-const (
-	get    = "get"
-	set    = "set"
-	delete = "del"
-	ping   = "ping"
-	quit   = "quit"
-)
+	"go.uber.org/zap"
 
-var (
-	RESP_OK []byte = []byte("OK\r\n")
+	"github.com/ajaxchavan/crow/internal/core"
 )
 
 func WaitForSignal(wg *sync.WaitGroup, sigch chan os.Signal, store *core.Store) {
@@ -56,99 +47,49 @@ func RunServer(wg *sync.WaitGroup, store *core.Store) {
 
 	defer syscall.Close(serverSocket)
 	for {
-		client, _, err := syscall.Accept(serverSocket)
+		fd, _, err := syscall.Accept(serverSocket)
 		if err != nil {
 			store.Log.Fatal("failed to accept connection", zap.Error(err))
 		}
 
-		go handleConnection(client, store)
+		go handleConnection(fd, store)
 
-		//syscall.Write(clientSocket, []byte("done"))
+		//syscall.Write(fdSocket, []byte("done"))
 	}
 
 }
 
-func handleConnection(client int, store *core.Store) {
-	defer syscall.Close(client)
-
+func handleConnection(fd int, store *core.Store) {
+	defer syscall.Close(fd)
 	for {
-		// Read from the socket
-		buffer := make([]byte, 1024)
-		n, err := syscall.Read(client, buffer)
+		client := core.NewClient(fd)
+		cmd, err := readCmd(client)
 		if err != nil {
-			fmt.Println("Error reading from socket:", err)
-			return
-		}
-
-		request := string(buffer[:n-2])
-
-		// Parse the request and perform the corresponding action
-		parts := strings.Split(request, " ")
-
-		command := parts[0]
-		var key string
-		if len(parts) != 1 {
-			key = parts[1]
-		}
-		store.Log.Info("command", zap.String(command, key))
-
-		switch command {
-		case ping:
-			syscall.Write(client, []byte("PONG\r\n"))
+			const msg = "failed to read cmd"
+			store.Log.Error(msg, zap.Error(err))
 			continue
-		case get:
-			value, err := store.Get(key)
-			if err != nil {
-				syscall.Write(client, []byte(err.Error()+"\r\n"))
-				continue
-			}
-			syscall.Write(client, []byte(string(value)+"\r\n"))
-		case set:
-			if len(parts) < 3 {
-				syscall.Write(client, []byte("Invalid command\r\n"))
-				continue
-			}
-			err := store.Set(key, []byte(parts[2]))
-			if err != nil {
-				syscall.Write(client, []byte(err.Error()+"\r\n"))
-				continue
-			}
-			syscall.Write(client, RESP_OK)
-		case delete:
-			if err := store.Delete(key); err != nil {
-				syscall.Write(client, []byte(err.Error()+"\r\n"))
-				continue
-			}
-			syscall.Write(client, RESP_OK)
-		default:
-			syscall.Write(client, []byte("Invalid command\r\n"))
 		}
+		response(store, cmd, client)
 	}
 }
 
-//
-//func temp() {
-//	//store = make(map[string]string)
-//
-//	// Listen for incoming connections
-//	listener, err := net.Listen("tcp", ":8080")
-//	if err != nil {
-//		fmt.Println("Error listening:", err)
-//		return
-//	}
-//	defer listener.Close()
-//
-//	fmt.Println("Server listening on port 8080...")
-//
-//	for {
-//		// Accept incoming connections
-//		conn, err := listener.Accept()
-//		if err != nil {
-//			fmt.Println("Error accepting connection:", err)
-//			continue
-//		}
-//
-//		//go handleConnection(conn)
-//		fmt.Println(conn)
-//	}
-//}
+func readCmd(c io.ReadWriter) (*core.CrowCmd, error) {
+	rp, err := core.NewParser(c)
+	if err != nil {
+		return nil, fmt.Errorf("unable to build parser %s", err)
+	}
+	p, err := rp.Decode()
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode %s", err)
+	}
+
+	tokens := core.ToArrayString(p)
+	return &core.CrowCmd{
+		Cmd:  strings.ToUpper(tokens[0]),
+		Args: tokens[1:],
+	}, nil
+}
+
+func response(store *core.Store, cmd *core.CrowCmd, client *core.Client) {
+	store.EvalAndResponse(cmd, client)
+}

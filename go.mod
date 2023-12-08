@@ -1,4 +1,4 @@
-module crow
+module github.com/ajaxchavan/crow
 
 go 1.18
 

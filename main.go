@@ -1,16 +1,17 @@
 package main
 
 import (
-	"crow/internal/config"
-	"crow/internal/core"
-	"crow/internal/log"
-	"crow/internal/server"
 	"fmt"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/ajaxchavan/crow/internal/config"
+	"github.com/ajaxchavan/crow/internal/core"
+	"github.com/ajaxchavan/crow/internal/log"
+	"github.com/ajaxchavan/crow/internal/server"
 )
 
 func main() {
