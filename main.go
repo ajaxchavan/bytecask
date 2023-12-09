@@ -15,7 +15,6 @@ import (
 )
 
 func main() {
-
 	//TODO: setupFlags()
 
 	logger, err := log.NewLogger()

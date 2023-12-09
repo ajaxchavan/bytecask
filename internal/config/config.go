@@ -3,8 +3,9 @@ package config
 import "time"
 
 var (
+	//defaultMergeInterval    = time.Hour * 6
 	defaultSyncInterval     = time.Minute * 1
-	defaultMergeInterval    = time.Hour * 6
+	defaultMergeInterval    = time.Minute * 3
 	defaultFileSizeInterval = time.Minute * 1
 )
 

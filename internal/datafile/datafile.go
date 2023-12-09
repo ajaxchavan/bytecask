@@ -1,7 +1,7 @@
 package datafile
 
 import (
-	"crow/internal/log"
+	"github.com/ajaxchavan/crow/internal/log"
 	"os"
 )
 
@@ -12,9 +12,7 @@ type Datafile struct {
 	offset int
 }
 
-type FileDir map[uint32]*Datafile
-
-type StaleDir map[uint32]Datafile
+type FileDir map[int]*Datafile
 
 const InvalidOffset = -1
 

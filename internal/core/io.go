@@ -62,7 +62,6 @@ func (r *RespParser) Decode() (string, error) {
 		}
 	}
 	//TODO: implement https://bou.ke/blog/hacking-developers
-	fmt.Println("Done decode")
 
 	return r.readString()
 }

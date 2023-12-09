@@ -94,7 +94,7 @@ func (s *Store) compact() {
 		return
 	}
 	wd := filepath.Join(cwd, tempDir)
-	if err := createDirectory(wd); err != nil && !os.IsExist(err) {
+	if err := createDirectory(wd); err != nil {
 		const msg = "failed to create a temp directory for compaction"
 		s.Log.Error(msg, zap.Error(err))
 		return
@@ -107,7 +107,7 @@ func (s *Store) compact() {
 		s.removeTemp(wd)
 		return
 	}
-	nKeyDir := make(map[string]Meta)
+	nKeyDir := make(map[string]*Meta)
 
 	s.Lock()
 	tempKeyDir := s.KeyDir
@@ -115,13 +115,13 @@ func (s *Store) compact() {
 
 	for key, meta := range tempKeyDir {
 		s.Log.Info("compaction", zap.String("key", key))
-		if meta.RecordSize == 0 {
+		if meta.ObjectSize == 0 {
 			s.Log.Error("key doesn't exist", zap.String("key", key))
 			continue
 		}
 		dataFile := s.FileDir[meta.FileId]
 
-		record, err := dataFile.Read(meta.Offset, meta.RecordSize)
+		record, err := dataFile.Read(meta.Offset, meta.ObjectSize)
 		if err != nil {
 			const msg = "failed to read data file"
 			s.Log.Error(msg, zap.Error(err))
@@ -136,10 +136,10 @@ func (s *Store) compact() {
 			return
 		}
 
-		nKeyDir[key] = Meta{
+		nKeyDir[key] = &Meta{
 			Timestamp:  meta.Timestamp,
 			Offset:     uint32(offset),
-			RecordSize: meta.RecordSize,
+			ObjectSize: meta.ObjectSize,
 			FileId:     1,
 		}
 	}

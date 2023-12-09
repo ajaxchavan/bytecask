@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go.uber.org/zap"
 	"hash/crc32"
@@ -21,15 +20,14 @@ type Store struct {
 	KeyDir     KeyDir
 	FileDir    datafile.FileDir
 	BufferPool sync.Pool
-	FileId     uint32
+	FileId     int
 	Log        log.Log
 	cfg        config.Config
-	stale      datafile.StaleDir
 	sync.Mutex
 }
 
 func createDirectory(directory string) error {
-	if err := os.Mkdir(directory, os.ModePerm); err != nil {
+	if err := os.Mkdir(directory, os.ModePerm); err != nil && !os.IsExist(err) {
 		return err
 	}
 	return nil
@@ -44,35 +42,26 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 	}
 	wd = filepath.Join(wd, cfg.Dir)
 
-	var stale datafile.StaleDir
-	var keyDir KeyDir
-	var fileDir map[uint32]*datafile.Datafile
-
 	err = createDirectory(wd)
-	var number uint32
+	var number int
 
-	switch {
-	case err == nil:
-		keyDir = make(map[string]Meta)
-		fileDir = make(map[uint32]*datafile.Datafile)
-	case errors.Is(err, os.ErrExist):
-		fileDir, number, err = buildStale(cfg.Dir, logger)
-		if err != nil {
-			const msg = "failed to build stale data"
-			logger.Error(msg, zap.Error(err))
-			return nil, err
-		}
-		keyDir, err = buildKeyDir(cfg.Dir, logger)
-		if err != nil {
-			const msg = "failed to build key directory"
-			logger.Error(msg, zap.Error(err))
-			return nil, err
-		}
-	default:
-		const msg = "failed to create data directory"
-		logger.Error(msg, zap.Error(err))
-		return nil, err
+	store := Store{
+		Log:     logger,
+		cfg:     cfg,
+		KeyDir:  make(map[string]*Meta),
+		FileDir: make(map[int]*datafile.Datafile),
 	}
+
+	number, err = store.buildFileDir()
+	if err != nil {
+		const msg = "failed to build file directory"
+		logger.Error(msg, zap.Error(err))
+		return nil, fmt.Errorf(msg+": %w", err)
+	}
+	store.FileId = number
+
+	store.buildKeyDir()
+
 	number += 1
 
 	df, err := datafile.New(filepath.Join(wd, fmt.Sprintf("data_%v.db", number)))
@@ -83,7 +72,7 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 	}
 
 	// debug
-	logger.Info("info", zap.Uint32("number", number))
+	logger.Info("info", zap.Int("number", number))
 	return &Store{
 		dataFile: df,
 		BufferPool: sync.Pool{
@@ -91,19 +80,18 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 				return new(bytes.Buffer)
 			},
 		},
-		KeyDir:  keyDir,
-		FileDir: fileDir,
+		KeyDir:  store.KeyDir,
+		FileDir: store.FileDir,
 		FileId:  number,
 		Log:     logger,
 		cfg:     cfg,
-		stale:   stale,
 	}, nil
 }
 
 func (s *Store) Get(key string) ([]byte, error) {
 	s.Lock()
 	meta := s.KeyDir[key]
-	if meta.RecordSize == 0 {
+	if meta == nil || meta.Timestamp == 0 {
 		s.Unlock()
 		return nil, fmt.Errorf("key doesn't exist")
 	}
@@ -111,7 +99,7 @@ func (s *Store) Get(key string) ([]byte, error) {
 	s.Unlock()
 
 	// TODO(edge_case): we got the datafile and at the same time compaction deleted that datafile.
-	record, err := dataFile.Read(meta.Offset, meta.RecordSize)
+	object, err := dataFile.Read(meta.Offset, meta.ObjectSize)
 	if err != nil {
 		const msg = "failed to read data file"
 		s.Log.Error(msg, zap.Error(err))
@@ -119,13 +107,13 @@ func (s *Store) Get(key string) ([]byte, error) {
 	}
 
 	header := Header{}
-	if err := header.decode(record); err != nil {
+	if err := header.decode(object); err != nil {
 		const msg = "failed to decode the record"
 		s.Log.Error(msg, zap.Error(err))
 		return nil, err
 	}
 
-	return record[meta.RecordSize-header.ValSize:], nil
+	return object[meta.ObjectSize-header.ValSize:], nil
 }
 
 func (s *Store) Set(key string, value []byte) error {
@@ -158,10 +146,10 @@ func (s *Store) Set(key string, value []byte) error {
 		return err
 	}
 
-	s.KeyDir[key] = Meta{
+	s.KeyDir[key] = &Meta{
 		Timestamp:  header.Timestamp,
 		Offset:     uint32(offset),
-		RecordSize: uint32(buffer.Len()),
+		ObjectSize: uint32(buffer.Len()),
 		FileId:     s.FileId,
 	}
 	s.Unlock()
@@ -170,11 +158,17 @@ func (s *Store) Set(key string, value []byte) error {
 }
 
 func (s *Store) Del(key string) error {
+	s.Lock()
+	defer s.Unlock()
 	meta := s.KeyDir[key]
-	if meta.RecordSize == 0 {
+	if meta.Timestamp == 0 {
 		return fmt.Errorf("key doesn't exist")
 	}
-	delete(s.KeyDir, key)
+
+	// TODO: set tombstone object
+	// TODO: append this to datafile
+	meta.Timestamp = 0
+	s.KeyDir[key] = meta
 	return nil
 }
 

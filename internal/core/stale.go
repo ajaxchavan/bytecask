@@ -1,9 +1,9 @@
 package core
 
 import (
-	"encoding/gob"
 	"fmt"
 	"go.uber.org/zap"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,73 +11,155 @@ import (
 	"strconv"
 
 	"github.com/ajaxchavan/crow/internal/datafile"
-	"github.com/ajaxchavan/crow/internal/log"
 )
 
 const (
-	hintFile = "key_hint.db"
+	hintFile          = "key_hint.db"
+	headerSize uint32 = 16
+	errLimit   uint32 = 5
 )
 
-func buildStale(dir string, logger log.Log) (map[uint32]*datafile.Datafile, uint32, error) {
-	data, err := ioutil.ReadDir(dir)
+var (
+	// fileRegex is the regex for a file.
+	// A valid file is in the format of: data_[0-9].db
+	fileRegex = regexp.MustCompile(`data_([0-9]+)\.db`)
+)
+
+// buildStale
+func (s *Store) buildFileDir() (int, error) {
+	var (
+		filePath   string
+		reader     *os.File
+		number     int
+		fileId     int    = 0
+		err        error  = nil
+		errCounter uint32 = 0
+	)
+
+	data, err := ioutil.ReadDir(s.cfg.Dir)
 	if err != nil {
 		const msg = "failed read data directory"
-		logger.Error(msg, zap.Error(err))
-		return nil, 0, err
+		s.Log.Error(msg, zap.Error(err))
+		return fileId, fmt.Errorf(msg+": %w", err)
 	}
 
-	var filePath string
-	var reader *os.File
-	var number int
-	staleDir := make(map[uint32]*datafile.Datafile)
 	for _, file := range data {
 		if file.Name() == hintFile {
 			continue
 		}
 
-		if file.Mode().IsRegular() {
-			filePath = filepath.Join(dir, file.Name())
-			reader, err = os.Open(filePath)
-			if err != nil {
-				const msg = "failed to open file"
-				logger.Error(msg, zap.Error(err))
-				return nil, 0, err
-			}
-			re := regexp.MustCompile(`(\d+)`)
-			matches := re.FindStringSubmatch(file.Name())
-			if len(matches) < 1 {
-				const msg = "unrecognised filed"
-				logger.Error(msg, zap.Error(err), zap.String("file", file.Name()))
-				return nil, 0, fmt.Errorf("no number found in the file name")
-			}
-			numberStr := matches[1]
-			number, err = strconv.Atoi(numberStr)
-			if err != nil {
-				const msg = "number provided for file is not a valid integer"
-				logger.Error(msg, zap.Error(err), zap.String("number", numberStr))
-				return nil, 0, err
-			}
-			staleDir[uint32(number)] = &datafile.Datafile{
-				Reader: reader,
+		matches := fileRegex.FindStringSubmatch(file.Name())
+		if len(matches) < 1 {
+			const msg = "no number found in the file name"
+			s.Log.Error(msg, zap.Error(err), zap.String("unrecognised file", file.Name()))
+			continue
+		}
+		numberStr := matches[1]
+		number, err = strconv.Atoi(numberStr)
+		if err != nil {
+			const msg = "number provided for file is not a valid integer"
+			s.Log.Error(msg, zap.Error(err), zap.String("number", numberStr))
+			continue
+		}
+		if number > fileId {
+			fileId = number
+		}
+
+		errCounter = 0
+		for {
+			if file.Mode().IsRegular() {
+				filePath = filepath.Join(s.cfg.Dir, file.Name())
+				reader, err = os.Open(filePath)
+				if err != nil {
+					const msg = "failed to open file"
+					s.Log.Error(msg, zap.Error(err))
+					if errCounter >= errLimit {
+						break
+					}
+					errCounter += 1
+					continue
+				}
+
+				s.FileDir[number] = &datafile.Datafile{
+					Reader: reader,
+				}
+				break
 			}
 		}
+
+		if errCounter > errLimit {
+			const msg = "failed creat a reader for file"
+			s.Log.Error(msg, zap.Error(err), zap.String("file", file.Name()))
+			return 0, fmt.Errorf(msg+": %w", err)
+		}
 	}
-	return staleDir, uint32(number), nil
+
+	return fileId, nil
 }
 
-func buildKeyDir(dir string, logger log.Log) (map[string]Meta, error) {
-	fpath := filepath.Join(dir, hintFile)
-	file, err := os.Open(fpath)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) buildKeyDir() {
+	var (
+		err        error  = nil
+		offset     uint32 = 0
+		headerObj  []byte
+		header     Header
+		object     []byte
+		objectSize uint32
+		errCounter uint32 = 0
+		key        string
+	)
 
-	encoder := gob.NewDecoder(file)
-	keyDir := make(map[string]Meta)
-	if err := encoder.Decode(&keyDir); err != nil {
-		const msg = "failed to decode keydir"
-		logger.Error(msg, zap.Error(err))
-		return nil, err
+	for fileId := 1; fileId <= s.FileId; fileId++ {
+		errCounter = 0
+		dt := s.FileDir[fileId]
+		offset = 0
+		for {
+			headerObj, err = dt.Read(offset, headerSize)
+			if err != nil {
+				if err == io.EOF || errCounter > errLimit {
+					break
+				}
+				s.Log.Error("failed to read datafile for header", zap.Error(err), zap.Uint32("error counter", errCounter))
+				errCounter += 1
+				continue
+			}
+
+			if err = header.decode(headerObj); err != nil {
+				const msg = "failed to decode the header"
+				s.Log.Error(msg, zap.Error(err))
+				if errCounter > errLimit {
+					break
+				}
+				errCounter += 1
+				continue
+			}
+
+			if header.Timestamp == 0 {
+				offset += headerSize
+				continue
+			}
+
+			objectSize = headerSize + header.KeySize + header.ValSize
+			object, err = dt.Read(offset, objectSize)
+			if err != nil {
+				if err == io.EOF || errCounter > errLimit {
+					break
+				}
+				s.Log.Error("failed to read datafile for header", zap.Error(err), zap.Uint32("error counter", errCounter))
+				errCounter += 1
+				continue
+			}
+
+			key = string(object[headerSize : headerSize+header.KeySize])
+
+			s.KeyDir[key] = &Meta{
+				Timestamp:  header.Timestamp,
+				Offset:     offset,
+				ObjectSize: objectSize,
+				FileId:     fileId,
+			}
+			offset += objectSize
+			errCounter = 0
+		}
 	}
-	return keyDir, nil
 }
