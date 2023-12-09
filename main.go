@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go.uber.org/zap"
 	"os"
@@ -16,6 +17,8 @@ import (
 
 func main() {
 	//TODO: setupFlags()
+	hint := flag.Bool("hint", false, "specify to build keydir from scratch and not to use hint_file")
+	flag.Parse()
 
 	logger, err := log.NewLogger()
 	if err != nil {
@@ -32,7 +35,7 @@ func main() {
 
 	cfg := config.NewConfig()
 
-	store, err := core.New(*cfg, *logger)
+	store, err := core.New(*cfg, *logger, *hint)
 	if err != nil {
 		logger.Fatal("failed to create store object", zap.Error(err))
 	}

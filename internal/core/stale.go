@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/gob"
 	"fmt"
 	"go.uber.org/zap"
 	"io"
@@ -95,6 +96,25 @@ func (s *Store) buildFileDir() (int, error) {
 	}
 
 	return fileId, nil
+}
+
+func (s *Store) buildKeyDirWithHintFile() error {
+	fpath := filepath.Join(s.cfg.Dir, hintFile)
+	file, err := os.Open(fpath)
+	if err != nil {
+		const msg = "failed to open hint file"
+		s.Log.Error(msg, zap.Error(err))
+		return fmt.Errorf(msg+": %w", err)
+	}
+
+	encoder := gob.NewDecoder(file)
+	if err := encoder.Decode(&s.KeyDir); err != nil {
+		const msg = "failed to decode keydir"
+		s.Log.Error(msg, zap.Error(err))
+		return fmt.Errorf(msg+": %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) buildKeyDir() {

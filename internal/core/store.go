@@ -33,7 +33,7 @@ func createDirectory(directory string) error {
 	return nil
 }
 
-func New(cfg config.Config, logger log.Log) (*Store, error) {
+func New(cfg config.Config, logger log.Log, hint bool) (*Store, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		const msg = "failed to get current directory"
@@ -60,7 +60,15 @@ func New(cfg config.Config, logger log.Log) (*Store, error) {
 	}
 	store.FileId = number
 
-	store.buildKeyDir()
+	if hint {
+		if err := store.buildKeyDirWithHintFile(); err != nil {
+			const msg = "failed to build key directory"
+			logger.Error(msg, zap.Error(err))
+			return nil, fmt.Errorf(msg+": %w", err)
+		}
+	} else {
+		store.buildKeyDir()
+	}
 
 	number += 1
 
