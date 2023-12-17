@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/gob"
 	"fmt"
 	"os"
@@ -43,7 +44,7 @@ func (s *Store) flush() error {
 	return nil
 }
 
-func (s *Store) AsyncFlush(wg *sync.WaitGroup) {
+func (s *Store) AsyncFlush(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	ticker := time.NewTicker(s.cfg.SyncInterval)
@@ -51,6 +52,9 @@ func (s *Store) AsyncFlush(wg *sync.WaitGroup) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			s.Log.Info("canceling async flush")
+			return
 		case <-ticker.C:
 			if err := s.flush(); err != nil {
 				const msg = "failed to flush keyDir to disk"
@@ -60,20 +64,19 @@ func (s *Store) AsyncFlush(wg *sync.WaitGroup) {
 				const msg = "failed to flush datafile to disk"
 				s.Log.Error(msg, zap.Error(err))
 			}
-			// TODO:
-			// case <-ctx.Done():
-			//	s.Log.Info("canceling async flush run")
-			//	return
 		}
 	}
 }
 
-func (s *Store) Compact(wg *sync.WaitGroup) {
+func (s *Store) Compact(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	ticker := time.NewTicker(s.cfg.MergeInterval)
 
+	ticker := time.NewTicker(s.cfg.MergeInterval)
 	for {
 		select {
+		case <-ctx.Done():
+			s.Log.Info("canceling compaction")
+			return
 		case <-ticker.C:
 			s.compact()
 		}
@@ -87,13 +90,12 @@ func (s *Store) compact() {
 	}
 	s.Log.Info("compaction started...")
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		const msg = "failed to get current directory"
-		s.Log.Error(msg, zap.Error(err))
-		return
-	}
-	wd := filepath.Join(cwd, tempDir)
+	wd := filepath.Join(s.cfg.Path, tempDir)
+
+	// Remove any existing compaction directories
+	s.removeTemp(wd)
+	s.removeTemp(filepath.Join(s.cfg.Path, tempDir2))
+
 	if err := createDirectory(wd); err != nil {
 		const msg = "failed to create a temp directory for compaction"
 		s.Log.Error(msg, zap.Error(err))
@@ -144,7 +146,7 @@ func (s *Store) compact() {
 		}
 	}
 
-	fpath := filepath.Join(cwd, hintFile)
+	fpath := filepath.Join(wd, hintFile)
 	writer, err := os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		const msg = "unable to open hint file"
@@ -164,7 +166,7 @@ func (s *Store) compact() {
 	// lock
 	s.Lock()
 
-	if err := os.Rename(s.cfg.Dir, filepath.Join(cwd, tempDir2)); err != nil {
+	if err := os.Rename(s.cfg.Dir, filepath.Join(s.cfg.Path, tempDir2)); err != nil {
 		s.Unlock()
 		const msg = "unable to rename data directory to temp directory"
 		s.Log.Error(msg, zap.Error(err))
@@ -173,7 +175,7 @@ func (s *Store) compact() {
 	}
 
 	// TODO: the data directory is already been renamed and if we get error here we need to rename it to data directory
-	if err := os.Rename(wd, filepath.Join(cwd, ".data")); err != nil {
+	if err := os.Rename(wd, filepath.Join(s.cfg.Path, ".data")); err != nil {
 		s.Unlock()
 		const msg = "unable to rename temp directory to data directory"
 		s.Log.Error(msg, zap.Error(err))
@@ -195,14 +197,11 @@ func (s *Store) compact() {
 		s.FileId = 2
 	}
 
-	// debug
-	time.Sleep(time.Minute * 2)
-
 	s.Unlock()
 	s.Log.Info("compaction done...")
 
 	//TODO: check if s.cfg.Dir is pointing to the right directory
-	s.removeTemp(filepath.Join(cwd, tempDir2))
+	s.removeTemp(filepath.Join(s.cfg.Path, tempDir2))
 }
 
 func (s *Store) removeTemp(wd string) {

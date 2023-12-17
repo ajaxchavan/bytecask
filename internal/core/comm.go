@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"syscall"
@@ -22,7 +23,18 @@ func (c *Client) Write(p []byte) (int, error) {
 }
 
 func (c *Client) Read(p []byte) (int, error) {
-	return syscall.Read(c.fd, p)
+	for {
+		n, err := syscall.Read(c.fd, p)
+		if err != nil {
+			var errno syscall.Errno
+			if errors.As(err, &errno) && (errno == syscall.EAGAIN || errno == syscall.EWOULDBLOCK) {
+				// EAGAIN or EWOULDBLOCK means no data available right now, try again
+				continue
+			}
+			return n, err // Return the result of the Read operation, even if it's an error
+		}
+		return n, err
+	}
 }
 
 func ToArrayString(line string) []string {

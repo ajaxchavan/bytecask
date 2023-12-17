@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"go.uber.org/zap"
@@ -20,6 +21,10 @@ func main() {
 	hint := flag.Bool("hint", false, "specify to build keydir from scratch and not to use hint_file")
 	flag.Parse()
 
+	// Create a context that can be cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	logger, err := log.NewLogger()
 	if err != nil {
 		fmt.Println("Failed to initialize ")
@@ -27,11 +32,10 @@ func main() {
 	}
 	logger.Info("Spotting a crow \U0001F98B")
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
 	cfg := config.NewConfig()
 
@@ -40,13 +44,22 @@ func main() {
 		logger.Fatal("failed to create store object", zap.Error(err))
 	}
 
-	go server.RunServer(&wg, store)
+	wg.Add(1)
+	go server.RunServer(ctx, &wg, store)
 
-	go server.WaitForSignal(&wg, sigs, store)
+	wg.Add(1)
+	go store.AsyncFlush(ctx, &wg)
 
-	go store.AsyncFlush(&wg)
+	wg.Add(1)
+	go store.Compact(ctx, &wg)
 
-	go store.Compact(&wg)
+	<-signals
+	logger.Info("shutting down....")
 
+	// tell goroutines to stop
+	cancel()
+	store.Shutdown()
+
+	// wait them all to reply back.
 	wg.Wait()
 }

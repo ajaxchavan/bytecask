@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 var (
 	//defaultMergeInterval    = time.Hour * 6
@@ -16,6 +19,7 @@ const (
 
 type Opts struct {
 	Dir                   string
+	Path                  string
 	fsync                 bool
 	SyncInterval          time.Duration
 	MergeInterval         time.Duration
@@ -29,8 +33,10 @@ type Config struct {
 type OptFunc func(*Opts)
 
 func defaultOpts() Opts {
+	wd, _ := os.Getwd()
 	return Opts{
 		Dir:                   ".data",
+		Path:                  wd,
 		fsync:                 false,
 		SyncInterval:          defaultSyncInterval,
 		MergeInterval:         defaultMergeInterval,
