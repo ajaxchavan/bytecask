@@ -6,10 +6,10 @@ import (
 )
 
 var (
-	//defaultMergeInterval    = time.Hour * 6
-	defaultSyncInterval     = time.Minute * 1
-	defaultMergeInterval    = time.Minute * 3
-	defaultFileSizeInterval = time.Minute * 1
+	// debug
+	defaultSyncInterval           = time.Minute * 1
+	defaultMergeInterval          = time.Minute * 3
+	defaultDatafileChangeInterval = time.Minute * 2
 )
 
 const (
@@ -18,12 +18,12 @@ const (
 )
 
 type Opts struct {
-	Dir                   string
-	Path                  string
-	fsync                 bool
-	SyncInterval          time.Duration
-	MergeInterval         time.Duration
-	checkFileSizeInterval *time.Duration
+	Dir                    string
+	Path                   string
+	fsync                  bool
+	SyncInterval           time.Duration
+	MergeInterval          time.Duration
+	DatafileChangeInterval time.Duration
 }
 
 type Config struct {
@@ -35,12 +35,12 @@ type OptFunc func(*Opts)
 func defaultOpts() Opts {
 	wd, _ := os.Getwd()
 	return Opts{
-		Dir:                   ".data",
-		Path:                  wd,
-		fsync:                 false,
-		SyncInterval:          defaultSyncInterval,
-		MergeInterval:         defaultMergeInterval,
-		checkFileSizeInterval: &defaultFileSizeInterval,
+		Dir:                    ".data",
+		Path:                   wd,
+		fsync:                  false,
+		SyncInterval:           defaultSyncInterval,
+		MergeInterval:          defaultMergeInterval,
+		DatafileChangeInterval: defaultDatafileChangeInterval,
 	}
 }
 

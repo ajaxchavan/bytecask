@@ -88,6 +88,7 @@ func (s *Store) compact() {
 		s.Log.Info("only 1 datafile exist, skipping compaction")
 		return
 	}
+	// debug
 	s.Log.Info("compaction started...")
 
 	wd := filepath.Join(s.cfg.Path, tempDir)
@@ -116,6 +117,7 @@ func (s *Store) compact() {
 	s.Unlock()
 
 	for key, meta := range tempKeyDir {
+		// debug
 		s.Log.Info("compaction", zap.String("key", key))
 		if meta.ObjectSize == 0 {
 			s.Log.Error("key doesn't exist", zap.String("key", key))
@@ -198,10 +200,50 @@ func (s *Store) compact() {
 	}
 
 	s.Unlock()
+	// debug
 	s.Log.Info("compaction done...")
 
 	//TODO: check if s.cfg.Dir is pointing to the right directory
 	s.removeTemp(filepath.Join(s.cfg.Path, tempDir2))
+}
+
+func (s *Store) updateActiveDatafile() error {
+	df, err := datafile.New(filepath.Join(filepath.Join(s.cfg.Path, s.cfg.Dir), fmt.Sprintf("data_%v.db", s.FileId+1)))
+	if err != nil {
+		const msg = "failed to create datafile"
+		s.Log.Error(msg, zap.Error(err))
+		return fmt.Errorf(msg+": %w", err)
+	}
+
+	s.Lock()
+	s.FileId += 1
+	s.FileDir[s.FileId] = df
+	s.dataFile = df
+	s.Unlock()
+
+	return nil
+}
+
+func (s *Store) UpdateActiveDatafile(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	ticker := time.NewTicker(s.cfg.DatafileChangeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.Log.Info("canceling update datafile")
+			return
+		case <-ticker.C:
+			if s.dataFile.IsFull() {
+				if err := s.updateActiveDatafile(); err != nil {
+					const msg = "failed to update active datafile"
+					s.Log.Error(msg, zap.Error(err))
+				}
+			}
+		}
+	}
 }
 
 func (s *Store) removeTemp(wd string) {

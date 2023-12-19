@@ -14,7 +14,12 @@ type Datafile struct {
 
 type FileDir map[int]*Datafile
 
-const InvalidOffset = -1
+const (
+	InvalidOffset = -1
+
+	// debug
+	dataFileSizeMax = 128
+)
 
 func New(filePath string) (*Datafile, error) {
 	writer, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
@@ -62,4 +67,9 @@ func (d *Datafile) Read(off uint32, size uint32) ([]byte, error) {
 	}
 
 	return buff, nil
+}
+
+func (d *Datafile) IsFull() bool {
+	frac := float32(d.offset) / float32(dataFileSizeMax)
+	return frac >= 0.95
 }

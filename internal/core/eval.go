@@ -30,7 +30,7 @@ func (s *Store) evalGet(args []string) []byte {
 
 func (s *Store) evalSet(args []string) []byte {
 	if len(args) > 2 || len(args) < 2 {
-		return Encode("ERR wrong number of arguments for 'get' command")
+		return Encode("ERR wrong number of arguments for 'set' command")
 	}
 	if err := s.Set(args[0], []byte(args[1])); err != nil {
 		return Encode(err.Error())
@@ -40,7 +40,7 @@ func (s *Store) evalSet(args []string) []byte {
 
 func (s *Store) evalDelete(args []string) []byte {
 	if len(args) > 1 || len(args) < 1 {
-		return Encode("ERR wrong number of arguments for 'get' command")
+		return Encode("ERR wrong number of arguments for 'del' command")
 	}
 	if err := s.Del(args[0]); err != nil {
 		return Encode(err.Error())

@@ -53,6 +53,9 @@ func main() {
 	wg.Add(1)
 	go store.Compact(ctx, &wg)
 
+	wg.Add(1)
+	go store.UpdateActiveDatafile(ctx, &wg)
+
 	<-signals
 	logger.Info("shutting down....")
 

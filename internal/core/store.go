@@ -34,15 +34,9 @@ func createDirectory(directory string) error {
 }
 
 func New(cfg config.Config, logger log.Log, hint bool) (*Store, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		const msg = "failed to get current directory"
-		logger.Error(msg, zap.Error(err))
-		return nil, err
-	}
-	wd = filepath.Join(wd, cfg.Dir)
+	wd := filepath.Join(cfg.Path, cfg.Dir)
 
-	err = createDirectory(wd)
+	err := createDirectory(wd)
 	var number int
 
 	store := Store{
@@ -74,10 +68,12 @@ func New(cfg config.Config, logger log.Log, hint bool) (*Store, error) {
 
 	df, err := datafile.New(filepath.Join(wd, fmt.Sprintf("data_%v.db", number)))
 	if err != nil {
-		const msg = "Failed to create datafile"
+		const msg = "failed to create datafile"
 		logger.Error(msg, zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf(msg+": %w", err)
 	}
+
+	store.FileDir[number] = df
 
 	// debug
 	logger.Info("info", zap.Int("number", number))
@@ -145,7 +141,6 @@ func (s *Store) Set(key string, value []byte) error {
 	buffer.Write(value)
 
 	s.Lock()
-	s.FileDir[s.FileId] = s.dataFile
 	offset, err := s.dataFile.Append(buffer.Bytes())
 	if err != nil {
 		s.Unlock()
