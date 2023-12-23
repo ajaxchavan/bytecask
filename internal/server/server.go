@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -84,16 +83,22 @@ func handleConnection(ctx context.Context, fd int, store *core.Store) {
 			client := core.NewClient(fd)
 			cmd, err := readCmd(client)
 			if err != nil {
+				_, _ = client.Write([]byte("invalid cmd\r\n"))
 				const msg = "failed to read cmd"
 				store.Log.Error(msg, zap.Error(err))
 				continue
 			}
+			if cmd == nil {
+				_, _ = client.Write([]byte("syntax error\r\n"))
+				continue
+			}
+
 			response(store, cmd, client)
 		}
 	}
 }
 
-func readCmd(c io.ReadWriter) (*core.CrowCmd, error) {
+func readCmd(c io.ReadWriter) (*core.Cmd, error) {
 	rp, err := core.NewParser(c)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build parser %s", err)
@@ -103,13 +108,9 @@ func readCmd(c io.ReadWriter) (*core.CrowCmd, error) {
 		return nil, fmt.Errorf("unable to decode %s", err)
 	}
 
-	tokens := core.ToArrayString(p)
-	return &core.CrowCmd{
-		Cmd:  strings.ToUpper(tokens[0]),
-		Args: tokens[1:],
-	}, nil
+	return core.NewCmd(p), nil
 }
 
-func response(store *core.Store, cmd *core.CrowCmd, client *core.Client) {
+func response(store *core.Store, cmd *core.Cmd, client *core.Client) {
 	store.EvalAndResponse(cmd, client)
 }

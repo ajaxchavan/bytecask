@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"io"
-	"strings"
 	"syscall"
 )
 
@@ -35,8 +34,4 @@ func (c *Client) Read(p []byte) (int, error) {
 		}
 		return n, err
 	}
-}
-
-func ToArrayString(line string) []string {
-	return strings.Split(line, " ")
 }

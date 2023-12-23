@@ -15,6 +15,14 @@ import (
 	"github.com/ajaxchavan/crow/internal/log"
 )
 
+var (
+	RESP_OK           = []byte("OK")
+	RESP_NIL          = []byte("(nil)")
+	RESP_INTERNAL_ERR = []byte("internal_error")
+	RESP_ONE          = []byte("1")
+	RESP_ZERO         = []byte("0")
+)
+
 type Store struct {
 	dataFile   *datafile.Datafile
 	KeyDir     KeyDir
@@ -92,12 +100,12 @@ func New(cfg config.Config, logger log.Log, hint bool) (*Store, error) {
 	}, nil
 }
 
-func (s *Store) Get(key string) ([]byte, error) {
+func (s *Store) get(key string) []byte {
 	s.Lock()
 	meta := s.KeyDir[key]
 	if meta == nil || meta.Timestamp == 0 {
 		s.Unlock()
-		return nil, fmt.Errorf("key doesn't exist")
+		return RESP_NIL
 	}
 	dataFile := s.FileDir[meta.FileId]
 	s.Unlock()
@@ -107,20 +115,24 @@ func (s *Store) Get(key string) ([]byte, error) {
 	if err != nil {
 		const msg = "failed to read data file"
 		s.Log.Error(msg, zap.Error(err))
-		return nil, err
+		return RESP_INTERNAL_ERR
 	}
 
 	header := Header{}
 	if err := header.decode(object); err != nil {
 		const msg = "failed to decode the record"
 		s.Log.Error(msg, zap.Error(err))
-		return nil, err
+		return RESP_INTERNAL_ERR
 	}
 
-	return object[meta.ObjectSize-header.ValSize:], nil
+	if header.ValSize == 0 {
+		return RESP_NIL
+	}
+
+	return object[meta.ObjectSize-header.ValSize:]
 }
 
-func (s *Store) Set(key string, value []byte) error {
+func (s *Store) set(key string, value []byte) []byte {
 	header := Header{
 		Timestamp: uint32(time.Now().Unix()),
 		Crc:       crc32.ChecksumIEEE(value),
@@ -134,7 +146,7 @@ func (s *Store) Set(key string, value []byte) error {
 	if err := header.encode(buffer); err != nil {
 		const msg = "unable to encode record"
 		s.Log.Error(msg, zap.Error(err))
-		return err
+		return RESP_INTERNAL_ERR
 	}
 
 	buffer.WriteString(key)
@@ -146,7 +158,7 @@ func (s *Store) Set(key string, value []byte) error {
 		s.Unlock()
 		const msg = "unable to append record"
 		s.Log.Error(msg, zap.Error(err))
-		return err
+		return RESP_INTERNAL_ERR
 	}
 
 	s.KeyDir[key] = &Meta{
@@ -157,22 +169,22 @@ func (s *Store) Set(key string, value []byte) error {
 	}
 	s.Unlock()
 
-	return nil
+	return RESP_OK
 }
 
-func (s *Store) Del(key string) error {
+func (s *Store) del(key string) []byte {
 	s.Lock()
 	defer s.Unlock()
 	meta := s.KeyDir[key]
 	if meta.Timestamp == 0 {
-		return fmt.Errorf("key doesn't exist")
+		return RESP_ZERO
 	}
 
 	// TODO: set tombstone object
 	// TODO: append this to datafile
 	meta.Timestamp = 0
 	s.KeyDir[key] = meta
-	return nil
+	return RESP_ONE
 }
 
 func (s *Store) isValidOffset(offset int) bool {

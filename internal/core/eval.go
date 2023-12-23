@@ -1,68 +1,49 @@
 package core
 
-var (
-	RESP_OK  = []byte("OK\r\n")
-	RESP_ONE = []byte("1\r\n")
+const (
+	pingCmd = "PING"
+	setCmd  = "SET"
+	delCmd  = "DEL"
+	getCmd  = "GET"
 )
 
-func (s *Store) evalPing(args []string) []byte {
-	if len(args) > 1 {
-		return Encode("ERR wrong number of arguments for 'ping' command")
-	}
-	// msg := len(args) == 1 ? args[0] : "PONG"
-	if len(args) == 1 {
-		return Encode(args[0])
-	}
-	return Encode("PONG")
+func (s *Store) evalPing(key string) []byte {
+	msg := func() string {
+		if key == "" {
+			return "PONG"
+		}
+		return key
+	}()
+	return Encode(msg)
 }
 
-func (s *Store) evalGet(args []string) []byte {
-	if len(args) > 1 || len(args) == 0 {
-		return Encode("ERR wrong number of arguments for 'get' command")
-	}
-	value, err := s.Get(args[0])
-	if err != nil {
-		return Encode(err.Error())
-	}
-
-	return Encode(value)
+func (s *Store) evalGet(key string) []byte {
+	return Encode(s.get(key))
 }
 
-func (s *Store) evalSet(args []string) []byte {
-	if len(args) > 2 || len(args) < 2 {
-		return Encode("ERR wrong number of arguments for 'set' command")
-	}
-	if err := s.Set(args[0], []byte(args[1])); err != nil {
-		return Encode(err.Error())
-	}
-	return RESP_OK
+func (s *Store) evalSet(key, value string) []byte {
+	return Encode(s.set(key, []byte(value)))
 }
 
-func (s *Store) evalDelete(args []string) []byte {
-	if len(args) > 1 || len(args) < 1 {
-		return Encode("ERR wrong number of arguments for 'del' command")
-	}
-	if err := s.Del(args[0]); err != nil {
-		return Encode(err.Error())
-	}
-	return RESP_ONE
+func (s *Store) evalDelete(key string) []byte {
+	return Encode(s.del(key))
 }
 
-func (s *Store) executeCmd(cmd *CrowCmd) []byte {
+func (s *Store) executeCmd(cmd *Cmd) []byte {
 	switch cmd.Cmd {
-	case "PING":
-		return s.evalPing(cmd.Args)
-	case "GET":
-		return s.evalGet(cmd.Args)
-	case "SET":
-		return s.evalSet(cmd.Args)
-	case "DEL":
-		return s.evalDelete(cmd.Args)
+	case pingCmd:
+		return s.evalPing(cmd.Args[0])
+	case getCmd:
+		return s.evalGet(cmd.Args[0])
+	case setCmd:
+		return s.evalSet(cmd.Args[0], cmd.Args[1])
+	case delCmd:
+		return s.evalDelete(cmd.Args[0])
 	default:
-		return s.evalPing(cmd.Args)
+		return s.evalPing(cmd.Args[0])
 	}
 }
 
-func (s *Store) EvalAndResponse(cmd *CrowCmd, client *Client) {
+func (s *Store) EvalAndResponse(cmd *Cmd, client *Client) {
 	_, _ = client.Write(s.executeCmd(cmd))
 }
