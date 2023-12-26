@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ajaxchavan/crow/internal/core"
+	"github.com/ajaxchavan/bytecask/internal/core"
 )
 
 func RunServer(ctx context.Context, wg *sync.WaitGroup, store *core.Store) {

@@ -1,4 +1,4 @@
-module github.com/ajaxchavan/crow
+module github.com/ajaxchavan/bytecask
 
 go 1.18
 

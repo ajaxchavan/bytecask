@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ajaxchavan/crow/internal/config"
+	"github.com/ajaxchavan/bytecask/internal/config"
 )
 
 type RespParser struct {

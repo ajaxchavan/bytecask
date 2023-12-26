@@ -1,7 +1,7 @@
 package datafile
 
 import (
-	"github.com/ajaxchavan/crow/internal/log"
+	"github.com/ajaxchavan/bytecask/internal/log"
 	"os"
 )
 

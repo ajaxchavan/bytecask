@@ -10,10 +10,10 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ajaxchavan/crow/internal/config"
-	"github.com/ajaxchavan/crow/internal/core"
-	"github.com/ajaxchavan/crow/internal/log"
-	"github.com/ajaxchavan/crow/internal/server"
+	"github.com/ajaxchavan/bytecask/internal/config"
+	"github.com/ajaxchavan/bytecask/internal/core"
+	"github.com/ajaxchavan/bytecask/internal/log"
+	"github.com/ajaxchavan/bytecask/internal/server"
 )
 
 func main() {
@@ -30,7 +30,8 @@ func main() {
 		fmt.Println("Failed to initialize ")
 		os.Exit(1)
 	}
-	logger.Info("Spotting a crow \U0001F98B")
+
+	logger.Info("Infusing brilliance in bytes! \U0001F4BE")
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)

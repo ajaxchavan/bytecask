@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ajaxchavan/crow/internal/config"
-	"github.com/ajaxchavan/crow/internal/datafile"
-	"github.com/ajaxchavan/crow/internal/log"
+	"github.com/ajaxchavan/bytecask/internal/config"
+	"github.com/ajaxchavan/bytecask/internal/datafile"
+	"github.com/ajaxchavan/bytecask/internal/log"
 )
 
 var (

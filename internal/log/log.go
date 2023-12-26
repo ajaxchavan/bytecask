@@ -21,8 +21,6 @@ func NewLogger() (*Log, error) {
 		return nil, err
 	}
 
-	logger.Debug("initializing logger")
-
 	return &Log{
 		Logger: logger,
 		level:  zap.NewAtomicLevelAt(zapcore.DebugLevel),
