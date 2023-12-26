@@ -132,6 +132,14 @@ func (s *Store) compact() {
 			s.removeTemp(wd)
 			return
 		}
+
+		// check if the record is deleted
+		if len(record)-(len(key)+16) == 0 {
+			// debug
+			s.Log.Info("record is deleted", zap.String("key", key))
+			continue
+		}
+
 		offset, err := dt.Append(record)
 		if err != nil {
 			const msg = "unable to append record"
@@ -200,6 +208,7 @@ func (s *Store) compact() {
 	}
 
 	s.Unlock()
+
 	// debug
 	s.Log.Info("compaction done...")
 

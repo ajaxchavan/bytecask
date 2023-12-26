@@ -103,7 +103,7 @@ func New(cfg config.Config, logger log.Log, hint bool) (*Store, error) {
 func (s *Store) get(key string) []byte {
 	s.Lock()
 	meta := s.KeyDir[key]
-	if meta == nil || meta.Timestamp == 0 {
+	if meta == nil {
 		s.Unlock()
 		return RESP_NIL
 	}
@@ -173,17 +173,19 @@ func (s *Store) set(key string, value []byte) []byte {
 }
 
 func (s *Store) del(key string) []byte {
-	s.Lock()
-	defer s.Unlock()
-	meta := s.KeyDir[key]
-	if meta.Timestamp == 0 {
+	object := string(s.get(key))
+	switch object {
+	case string(RESP_NIL):
 		return RESP_ZERO
+	case string(RESP_INTERNAL_ERR):
+		return RESP_INTERNAL_ERR
 	}
 
-	// TODO: set tombstone object
-	// TODO: append this to datafile
-	meta.Timestamp = 0
-	s.KeyDir[key] = meta
+	resp := s.set(key, nil)
+	if string(resp) != string(RESP_OK) {
+		return RESP_INTERNAL_ERR
+	}
+
 	return RESP_ONE
 }
 
