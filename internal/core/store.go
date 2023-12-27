@@ -160,6 +160,10 @@ func (s *Store) set(key string, value []byte) []byte {
 		s.Log.Error(msg, zap.Error(err))
 		return RESP_INTERNAL_ERR
 	}
+	
+	if s.cfg.Fsync {
+		_ = s.dataFile.Flush()
+	}
 
 	s.KeyDir[key] = &Meta{
 		Timestamp:  header.Timestamp,

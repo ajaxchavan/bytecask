@@ -17,8 +17,8 @@ import (
 )
 
 func main() {
-	//TODO: setupFlags()
-	hint := flag.Bool("hint", false, "specify to build keydir from scratch and not to use hint_file")
+	hint := flag.Bool("hint", false, "specify to build key directory from scratch and not to use hint_file")
+	fsync := flag.Bool("fsync", false, "specify to fsync datafile after every write")
 	flag.Parse()
 
 	// Create a context that can be cancelled
@@ -38,7 +38,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	cfg := config.NewConfig()
+	cfg := config.NewConfig(config.WithFsync(*fsync))
 
 	store, err := core.New(*cfg, *logger, *hint)
 	if err != nil {

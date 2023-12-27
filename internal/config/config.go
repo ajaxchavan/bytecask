@@ -20,7 +20,7 @@ const (
 type Opts struct {
 	Dir                    string
 	Path                   string
-	fsync                  bool
+	Fsync                  bool
 	SyncInterval           time.Duration
 	MergeInterval          time.Duration
 	DatafileChangeInterval time.Duration
@@ -37,10 +37,22 @@ func defaultOpts() Opts {
 	return Opts{
 		Dir:                    ".data",
 		Path:                   wd,
-		fsync:                  false,
+		Fsync:                  false,
 		SyncInterval:           defaultSyncInterval,
 		MergeInterval:          defaultMergeInterval,
 		DatafileChangeInterval: defaultDatafileChangeInterval,
+	}
+}
+
+func WithFsync(fsync bool) OptFunc {
+	return func(opts *Opts) {
+		opts.Fsync = fsync
+	}
+}
+
+func WithDirectoryPath(path string) OptFunc {
+	return func(opts *Opts) {
+		opts.Path = path
 	}
 }
 
