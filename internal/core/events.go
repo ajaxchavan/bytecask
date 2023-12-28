@@ -212,7 +212,6 @@ func (s *Store) compact() {
 	// debug
 	s.Log.Info("compaction done...")
 
-	//TODO: check if s.cfg.Dir is pointing to the right directory
 	s.removeTemp(filepath.Join(s.cfg.Path, tempDir2))
 }
 
