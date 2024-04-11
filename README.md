@@ -2,7 +2,8 @@
 
 ## Overview
 
-ByteCask is a lightweight, high-performance database engine developed based on the principles outlined in the Bitcask paper. Bitcask is a log-structured hash table designed for fast key-value storage and retrieval with predictable and efficient performance characteristics. ByteCask builds upon these ideas, aiming to provide a simple and robust database engine for a variety of applications.
+ByteCask is a lightweight, high-performance database engine developed based on the principles outlined in the [Bitcask](https://riak.com/assets/bitcask-intro.pdf) paper. Bitcask is a log-structured hash table designed for fast key-value storage and retrieval with predictable and efficient performance characteristics. ByteCask builds upon these ideas, aiming to provide a simple and robust database engine for a variety of applications.
+
 
 ## Features
 
