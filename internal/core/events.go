@@ -103,7 +103,7 @@ func (s *Store) compact() {
 		return
 	}
 
-	dt, err := datafile.New(filepath.Join(tempDir, fmt.Sprintf("data_%v.db", 1)))
+	dt, err := datafile.New(datafile.GetDatafile(tempDir, 1))
 	if err != nil {
 		const msg = "failed to create a datafile for compaction"
 		s.Log.Error(msg, zap.Error(err))
@@ -196,7 +196,7 @@ func (s *Store) compact() {
 	s.KeyDir = nKeyDir
 	s.FileDir = make(datafile.FileDir)
 	s.FileDir[1] = dt
-	nDatafile, err := datafile.New(filepath.Join(s.cfg.Dir, fmt.Sprintf("data_%v.db", 2)))
+	nDatafile, err := datafile.New(datafile.GetDatafile(s.cfg.Dir, 2))
 	if err != nil {
 		const msg = "failed to create a new datafile"
 		s.Log.Error(msg, zap.Error(err))
